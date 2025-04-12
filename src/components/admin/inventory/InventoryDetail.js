@@ -135,14 +135,7 @@ export default function InventoryDetail() {
                                 </div>
                             </div>
 
-                            <div className="alert alert-info">
-                                <i className="bi bi-info-circle me-2"></i>
-                                {product.stock <= 10 ? (
-                                    <strong>Low stock alert! Consider restocking soon.</strong>
-                                ) : (
-                                    'Stock levels are healthy.'
-                                )}
-                            </div>
+                            
                         </div>
                     </div>
                 </div>
