@@ -2,25 +2,22 @@ import { useContext, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { AppContext } from "../../../AppContext"
 
-
 export default function UserList(){
-
     const [users, setUsers] = useState([])
+    const [searchQuery, setSearchQuery] = useState("") // Add search state
     const {userCredentials, setUserCredentials} = useContext(AppContext)
     const navigate = useNavigate()
-
-
-    //pagination funcionality
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const pageSize = 5
 
     async function getUsers() {
-
-        const url = process.env.REACT_APP_WEBAPI_URL + "/users?_page=" + currentPage + "&_limit=" + pageSize
+        // Add search query to URL if present
+        const searchParam = searchQuery ? `&q=${searchQuery}` : ""
+        const url = `${process.env.REACT_APP_WEBAPI_URL}/users?_page=${currentPage}&_limit=${pageSize}${searchParam}`
 
         try {
-            const response = await fetch(url ,{
+            const response = await fetch(url, {
                 method: "GET", 
                 headers:{
                     "Authorization" : "Bearer " + userCredentials.accessToken
@@ -28,7 +25,6 @@ export default function UserList(){
             })
 
             let totalCount = response.headers.get('X-Total-Count')
-            console.log("X Total-count: " + totalCount)
             let pages = Math.ceil(totalCount/pageSize)
             setTotalPages(pages)
 
@@ -49,6 +45,17 @@ export default function UserList(){
         }
     }
 
+    // Add useEffect for search
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            setCurrentPage(1) // Reset to first page when searching
+            getUsers()
+        }, 300) // Debounce search
+
+        return () => clearTimeout(timeoutId)
+    }, [searchQuery])
+
+    // Add useEffect for pagination
     useEffect(() => {
         getUsers()
     }, [currentPage])
@@ -68,7 +75,34 @@ export default function UserList(){
 
     return(
         <div className="container my-4">
-            <h2 className="text-center mb-5">List of Users</h2>
+            <h2 className="text-center mb-4">List of Users</h2>
+
+            {/* Add search bar */}
+            <div className="row mb-4">
+                <div className="col-md-6 mx-auto">
+                    <div className="input-group">
+                        <span className="input-group-text">
+                            <i className="bi bi-search"></i>
+                        </span>
+                        <input 
+                            type="text" 
+                            className="form-control" 
+                            placeholder="Search users..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {searchQuery && (
+                            <button 
+                                className="btn btn-outline-secondary" 
+                                type="button"
+                                onClick={() => setSearchQuery("")}
+                            >
+                                <i className="bi bi-x"></i>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             <table className="table">
                 <thead>

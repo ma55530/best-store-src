@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 
 export default function Home() {
@@ -9,9 +9,16 @@ export default function Home() {
     const [totalPages, setTotalPages] = useState(1)
     const pageSize = 8
 
-    const [filterParams, setFilterParams] = useState({brand: "", category: ""})
+    const [filterParams, setFilterParams] = useState({brand: "", category: "", q: ""}) // Add search query parameter
 
     const [sortColumn, setSortColumn] = useState({column: "id", orderBy:"desc"})
+
+    const [searchQuery, setSearchQuery] = useState(""); // Add to existing state declarations
+
+    // Add debounced search function
+    const debouncedSearch = useCallback((query) => {
+        setFilterParams(prev => ({...prev, q: query}));
+    }, [setFilterParams]); // Add dependency
 
     function getProducts(){
         let url = process.env.REACT_APP_WEBAPI_URL + "/products?_page=" + currentPage + "&_limit=" + pageSize
@@ -22,6 +29,10 @@ export default function Home() {
 
         if(filterParams.category){
             url += "&category=" + filterParams.category
+        }
+
+        if(filterParams.q){
+            url += "&q=" + filterParams.q
         }
 
         url += "&_sort=" + sortColumn.column + "&_order=" + sortColumn.orderBy
@@ -76,6 +87,15 @@ export default function Home() {
         else if(val === "1") setSortColumn({column:"price", orderBy: "asc"})
         else if(val === "2") setSortColumn({column:"price", orderBy: "desc"})    
     }
+
+    // Modify handleSearch function
+    function handleSearch(event) {
+        const query = event.target.value;
+        setSearchQuery(query);
+        debouncedSearch(query);
+        setCurrentPage(1);
+    }
+
     return (
         <>
             <div style={{ backgroundColor: "#09618d", minHeight: "200px" }}>
@@ -100,6 +120,36 @@ export default function Home() {
 
             <div className="bg-light">
                 <div className="container py-5">
+                    <div className="row mb-4">
+                        <div className="col-md-6 mx-auto">
+                            <div className="input-group">
+                                <span className="input-group-text">
+                                    <i className="bi bi-search"></i>
+                                </span>
+                                <input 
+                                    type="text" 
+                                    className="form-control" 
+                                    placeholder="Search products..." 
+                                    value={searchQuery}
+                                    onChange={handleSearch}
+                                />
+                                {searchQuery && (
+                                    <button 
+                                        className="btn btn-outline-secondary" 
+                                        type="button"
+                                        onClick={() => {
+                                            setSearchQuery("");
+                                            setFilterParams({...filterParams, q: ""});
+                                            setCurrentPage(1);
+                                        }}
+                                    >
+                                        <i className="bi bi-x"></i>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="row mb-5 g-2">
                         <div className="col-md-6">
                             <h4>Products</h4>
@@ -151,6 +201,19 @@ export default function Home() {
             </div>
         </>
     )
+}
+
+// Add debounce utility function
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }
 
 function ProductItem({product}){

@@ -91,7 +91,7 @@ function UpdateProfile(){
     const {userCredentials, setUserCredentials} = useContext(AppContext)
     const navigate = useNavigate()
 
-    async function handleSubmit(event){
+    async function handleSubmitUpdateProfile(event){
         event.preventDefault()
 
         const formData = new FormData(event.target)
@@ -134,7 +134,7 @@ function UpdateProfile(){
     }
 
     return(
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmitUpdateProfile}>
             <div className="row mb-3">
                 <label className="col-sm-4 col-form-label">First Name *</label>
                 <div className="col-sm-8">
@@ -174,7 +174,6 @@ function UpdateProfile(){
 }
 
 function UpdatePassword(){
-
     const {userCredentials, setUserCredentials} = useContext(AppContext)
     const navigate = useNavigate()
 
@@ -183,53 +182,96 @@ function UpdatePassword(){
 
         const password = event.target.password.value
         const confirm_password = event.target.confirm_password.value
+        const current_password = event.target.current_password.value
 
-        if(!password){
-            alert("Please fill the new Password")
+        // Validation checks
+        if(!current_password || !password || !confirm_password){
+            alert("Please fill all password fields")
             return
         }
         if(password !== confirm_password){
-            alert("The passwords do not match!")
+            alert("The new passwords do not match!")
             return
         }
-        const passwordObj = {password}
+        if(current_password === password){
+            alert("New password must be different from current password")
+            return
+        }
 
+        // First verify current password
         try {
-            const response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/users/" + userCredentials.user.id,{
+            const verifyResponse = await fetch(process.env.REACT_APP_WEBAPI_URL + "/users/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    email: userCredentials.user.email,
+                    password: current_password
+                })
+            })
+
+            if (!verifyResponse.ok) {
+                alert("Current password is incorrect")
+                return
+            }
+
+            // If current password verified, proceed with password update
+            const response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/users/" + userCredentials.user.id, {
                 method: "PATCH",
-                headers:{
+                headers: {
                     "Content-Type": "application/json",
                     "Authorization": "Bearer " + userCredentials.accessToken
                 },
-                body: JSON.stringify(passwordObj)
+                body: JSON.stringify({ password })
             })
 
             const data = await response.json()
 
             if(response.ok){
-                alert("Password updated correctly")
-            }
-            else if(response.status === 401){
+                alert("Password updated successfully")
+                event.target.reset()
+            } else if(response.status === 401){
                 setUserCredentials(null)
                 navigate("/auth/login")
-            }
-            else{
+            } else {
                 alert("Unable to update the password: " + data)
             }
         } catch (error) {
             alert("Unable to connect to the server")
         }
     }
+
     return(
         <form onSubmit={handleSubmit}>
             <div className="mb-3">
-                <label className="form-label">New Password *</label>
-                <input className="form-control" name="password" type="password" />
+                <label className="form-label">Current Password *</label>
+                <input 
+                    className="form-control" 
+                    name="current_password" 
+                    type="password"
+                    required 
+                />
             </div>
 
             <div className="mb-3">
-                <label className="form-label">Confirm Password *</label>
-                <input className="form-control" name="confirm_password" type="password" />
+                <label className="form-label">New Password *</label>
+                <input 
+                    className="form-control" 
+                    name="password" 
+                    type="password"
+                    required 
+                />
+            </div>
+
+            <div className="mb-3">
+                <label className="form-label">Confirm New Password *</label>
+                <input 
+                    className="form-control" 
+                    name="confirm_password" 
+                    type="password"
+                    required 
+                />
             </div>
 
             <div className="text-end">
