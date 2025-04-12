@@ -1,6 +1,6 @@
 # Best Store
 
-A demo webshop project created by Matija Akrap.
+The source code of my demo webshop project.
 
 ## Setup
 
