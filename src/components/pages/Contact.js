@@ -42,7 +42,7 @@ export default function Contact() {
                             <div className="col-md-4 text-center p-4">
                                 <img src={process.env.PUBLIC_URL + "/icon.png"} alt="Profile" className="img-fluid rounded-circle mb-3" style={{width:120, height:120, objectFit:'cover', border:'4px solid #0d6efd'}} />
                                 <h4 className="fw-bold mb-0">Matija Akrap</h4>
-                                <div className="text-muted mb-2">Full Stack Developer</div>
+                                <div className="text-muted mb-2">CS Student</div>
                                 <div className="mb-3 position-relative">
                                     <button
                                         className="btn btn-outline-primary btn-sm m-1"
@@ -68,7 +68,6 @@ export default function Contact() {
                                 <p>
                                     I’m Matija Akrap, a computer science student at FER, University of Zagreb 
                                     with a passion in learning modern technologies and building cool stuff.
-                                    
                                 </p>
                                 <h5 className="mt-4">Skills</h5>
                                 <ul className="list-inline mb-3">
