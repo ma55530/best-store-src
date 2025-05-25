@@ -101,7 +101,7 @@ export default function Home() {
                             <h1 className="mb-5 display-2">
                                 <strong>Best store</strong>
                             </h1>
-                            <p>A demo webshop project created by Matija Akrap</p>
+                            <p>A Demo Webshop project created by Matija Akrap</p>
                         </div>
                         <div className="col-md-6 text-center">
                             <img 

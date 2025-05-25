@@ -143,7 +143,7 @@ export default function ProductList() {
                                     alt={product.name || "Product"}
                                 />
                             </td>
-                            <td>{product.created_at ? product.created_at.slice(0, 10) : "N/A"}</td>
+                            <td>{product.createdAt ? product.createdAt.slice(0, 10) : "N/A"}</td>
                             <td style={{ whiteSpace: "nowrap" }}>
                                 <Link className="btn btn-primary btn-sm me-1" to={`/admin/products/edit/${product.id}`}>
                                     Edit
