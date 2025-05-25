@@ -66,7 +66,9 @@ export default function Contact() {
                             <div className="col-md-8 p-4">
                                 <h2 className="mb-3">About Me</h2>
                                 <p>
-                                    Hi! I'm Matija Akrap, a passionate Full Stack Developer with experience in building modern web applications using React, Node.js, and cloud technologies like Supabase. I enjoy solving complex problems and creating beautiful, user-friendly interfaces.
+                                    I’m Matija Akrap, a computer science student at FER, University of Zagreb 
+                                    with a passion in learning modern technologies and building cool stuff.
+                                    
                                 </p>
                                 <h5 className="mt-4">Skills</h5>
                                 <ul className="list-inline mb-3">
