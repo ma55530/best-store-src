@@ -1,6 +1,8 @@
 import { useContext } from "react";
 import { Link, useNavigate, Navigate } from "react-router-dom";
 import { AppContext } from "../../AppContext";
+import { supabase } from '../../supabaseClient';
+import bcrypt from 'bcryptjs';
 
 export default function Register(){
 
@@ -29,23 +31,26 @@ export default function Register(){
         delete user.confirm_password
 
         try {
-            const response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/register",{
-                method: "POST",
-                headers:{
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(user)
-            })
-            
-            const data = await response.json()
+            // Hash the password before storing
+            const salt = bcrypt.genSaltSync(12);
+            const hashedPassword = bcrypt.hashSync(user.password, salt);
 
-            if(response.ok){
-                setUserCredentials(data)
-                console.log("server response: " + data)
-                navigate("/")
-            }
-            else{
-                alert("Unable to register: " +  data)
+            // Insert user into your own users table (omit id, let Supabase/Postgres auto-generate it)
+            const { data, error } = await supabase.from('Users').insert([
+                {
+                    firstname: user.firstname,
+                    lastname: user.lastname,
+                    email: user.email,
+                    phone: user.phone,
+                    address: user.address,
+                    password: hashedPassword
+                }
+            ]);
+            if (error) {
+                alert("Unable to register: " + (error.message || JSON.stringify(error)))
+            } else {
+                alert("Registration successful! You can now log in.");
+                navigate("/auth/login");
             }
         } catch (error) {
             alert("Unable to connect to the server")

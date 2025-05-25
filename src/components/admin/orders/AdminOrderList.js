@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { AppContext } from '../../../AppContext';
+import { supabase } from '../../../supabaseClient';
 
 const getStatusStyles = (status) => {
     switch (status) {
@@ -25,20 +26,36 @@ export default function AdminOrderList() {
     const [sortField, setSortField] = useState('createdAt');
     const [sortDirection, setSortDirection] = useState('desc');
     const { userCredentials } = useContext(AppContext);
+    const [orderItemsMap, setOrderItemsMap] = useState({});
 
     useEffect(() => {
-        fetchOrders();
+        fetchOrdersAndItems();
     }, [userCredentials]);
 
-    const fetchOrders = async () => {
+    const fetchOrdersAndItems = async () => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/orders`, {
-                headers: {
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
+            // Fetch all orders from Supabase
+            const { data: ordersData, error: ordersError } = await supabase
+                .from('Orders')
+                .select('*');
+            if (ordersError) throw ordersError;
+            setOrders(ordersData || []);
+            // Fetch all order items for these orders
+            const orderIds = (ordersData || []).map(o => o.id);
+            if (orderIds.length > 0) {
+                const { data: itemsData, error: itemsError } = await supabase
+                    .from('Order_items')
+                    .select('order_id, quantity')
+                    .in('order_id', orderIds);
+                if (!itemsError && itemsData) {
+                    // Map order_id to total items
+                    const map = {};
+                    itemsData.forEach(item => {
+                        map[item.order_id] = (map[item.order_id] || 0) + item.quantity;
+                    });
+                    setOrderItemsMap(map);
                 }
-            });
-            const data = await response.json();
-            setOrders(data);
+            }
         } catch (error) {
             alert('Failed to fetch orders');
         } finally {
@@ -48,22 +65,23 @@ export default function AdminOrderList() {
 
     const handleStatusChange = async (orderId, newStatus) => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/orders/${orderId}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
-                },
-                body: JSON.stringify({ status: newStatus })
-            });
-
-            if (response.ok) {
-                fetchOrders(); // Refresh orders list
-            } else {
-                throw new Error('Failed to update order status');
-            }
+            const { error } = await supabase
+                .from('Orders')
+                .update({ status: newStatus })
+                .eq('id', orderId);
+            if (error) throw new Error('Failed to update order status');
+            fetchOrdersAndItems();
         } catch (error) {
             alert(error.message);
+        }
+    };
+
+    const handleSort = (field) => {
+        if (field === sortField) {
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('asc');
         }
     };
 
@@ -84,7 +102,7 @@ export default function AdminOrderList() {
                     comparison = a.status.localeCompare(b.status);
                     break;
                 case 'user':
-                    comparison = a.userId - b.userId;
+                    comparison = a.user_id - b.user_id;
                     break;
                 default:
                     comparison = 0;
@@ -93,19 +111,9 @@ export default function AdminOrderList() {
         });
     };
 
-    const handleSort = (field) => {
-        if (field === sortField) {
-            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-        } else {
-            setSortField(field);
-            setSortDirection('asc');
-        }
-    };
-
     return (
         <div className="container my-4">
             <h2 className="text-center mb-4">Order Management</h2>
-
             {isLoading ? (
                 <div className="text-center">
                     <div className="spinner-border" role="status">
@@ -141,6 +149,7 @@ export default function AdminOrderList() {
                                     Status {sortField === 'status' && 
                                     <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`}></i>}
                                 </th>
+                                <th>Items</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -148,11 +157,11 @@ export default function AdminOrderList() {
                             {getSortedOrders().map(order => (
                                 <tr key={order.id}>
                                     <td>#{order.id}</td>
-                                    <td>{order.userId}</td>
-                                    <td>{new Date(order.createdAt).toLocaleDateString()}</td>
+                                    <td>{order.user_id}</td>
+                                    <td>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ''}</td>
                                     <td>${order.total}</td>
                                     <td>
-                                        <div className="d-flex align-items-center">
+                                        <div className={`d-flex align-items-center`}>
                                             <select 
                                                 className={`form-select form-select-sm me-2 text-${getStatusStyles(order.status).color}`}
                                                 value={order.status}
@@ -169,6 +178,7 @@ export default function AdminOrderList() {
                                             </span>
                                         </div>
                                     </td>
+                                    <td>{orderItemsMap[order.id] || 0}</td>
                                     <td>
                                         <Link 
                                             to={`/admin/orders/${order.id}`} 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AppContext } from '../../../AppContext';
+import { supabase } from '../../../supabaseClient';
 
 export default function InventoryDetail() {
     const [product, setProduct] = useState(null);
@@ -11,18 +12,16 @@ export default function InventoryDetail() {
     const navigate = useNavigate();
 
     const fetchProductDetails = useCallback(async () => {
+        setIsLoading(true);
         try {
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/products/${id}`, {
-                headers: {
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
-                }
-            });
-            
-            if (!response.ok) {
+            const { data, error } = await supabase
+                .from('Products')
+                .select('*')
+                .eq('id', id)
+                .single();
+            if (error || !data) {
                 throw new Error('Product not found');
             }
-            
-            const data = await response.json();
             setProduct(data);
         } catch (error) {
             alert(error.message);
@@ -30,7 +29,7 @@ export default function InventoryDetail() {
         } finally {
             setIsLoading(false);
         }
-    }, [id, userCredentials, navigate]);
+    }, [id, navigate]);
 
     useEffect(() => {
         fetchProductDetails();
@@ -38,22 +37,15 @@ export default function InventoryDetail() {
 
     const handleStockUpdate = async (newStock) => {
         if (newStock < 0) return;
-        
         setIsSaving(true);
         try {
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/products/${id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
-                },
-                body: JSON.stringify({ stock: newStock })
-            });
-
-            if (!response.ok) {
+            const { error } = await supabase
+                .from('Products')
+                .update({ stock: newStock })
+                .eq('id', id);
+            if (error) {
                 throw new Error('Failed to update stock');
             }
-
             setProduct(prev => ({ ...prev, stock: newStock }));
         } catch (error) {
             alert(error.message);
@@ -91,8 +83,8 @@ export default function InventoryDetail() {
             <div className="row">
                 <div className="col-md-4">
                     <div className="card mb-4">
-                        <img 
-                            src={`${process.env.REACT_APP_WEBAPI_URL}/images/${product.imageFilename}`}
+                        <img
+                            src={`${process.env.REACT_APP_SUPABASE_IMAGE_URL}/${product.imageFilename}`}
                             className="card-img-top"
                             alt={product.name}
                         />
@@ -134,8 +126,12 @@ export default function InventoryDetail() {
                                     </button>
                                 </div>
                             </div>
-
-                            
+                        </div>
+                        <div className="card-body">
+                            <h5 className="card-title mb-4">Description</h5>
+                            <div className="mb-4">
+                                <p className="card-text">{product.description}</p>
+                            </div>
                         </div>
                     </div>
                 </div>

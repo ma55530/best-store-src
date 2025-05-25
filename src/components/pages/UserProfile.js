@@ -1,6 +1,8 @@
 import { useContext, useState } from "react"
 import { AppContext } from "../../AppContext"
-import { useNavigate} from "react-router-dom"
+import { useNavigate } from "react-router-dom"
+import { supabase } from '../../supabaseClient'
+import bcrypt from 'bcryptjs'
 
 export default function UserProfile(){
 
@@ -102,33 +104,27 @@ function UpdateProfile(){
             return
         }
 
-        try{
-            const response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/users/" + userCredentials.user.id,{
-                method: "PATCH",
-                headers:{
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + userCredentials.accessToken
-                },
-                body: JSON.stringify(user) 
-            })
-
-            const data = await response.json()
-
-            if(response.ok){
+        try {
+            // Update user in Supabase
+            const { data, error } = await supabase
+                .from('Users')
+                .update({
+                    firstname: user.firstname,
+                    lastname: user.lastname,
+                    email: user.email,
+                    phone: user.phone,
+                    address: user.address
+                })
+                .eq('id', userCredentials.user.id)
+                .select()
+                .single();
+            if (error) {
+                alert("Unable to update the profile: " + (error.message || JSON.stringify(error)))
+            } else {
                 alert("User Profile updated correctly")
-                console.log("server response: ", data)
                 setUserCredentials({...userCredentials, user: data})
-                return
             }
-            else if (response.status === 401){
-                setUserCredentials(null)
-                navigate("/auth/login")
-            }
-            else{
-                alert("Unable to update the profile: " + data) 
-            }
-
-        }catch(error){
+        } catch (error) {
             alert("Unable to connect to the server")
         }
     }
@@ -160,7 +156,7 @@ function UpdateProfile(){
                 </div>
             </div>
             <div className="row mb-3">
-                <label className="col-sm-4 col-form-label">Addres</label>
+                <label className="col-sm-4 col-form-label">Address</label>
                 <div className="col-sm-8">
                     <input className="form-control" name="address" defaultValue={userCredentials.user.address}/>
                 </div>
@@ -198,44 +194,36 @@ function UpdatePassword(){
             return
         }
 
-        // First verify current password
         try {
-            const verifyResponse = await fetch(process.env.REACT_APP_WEBAPI_URL + "/users/login", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    email: userCredentials.user.email,
-                    password: current_password
-                })
-            })
-
-            if (!verifyResponse.ok) {
+            // Fetch user from Supabase
+            const { data: userData, error: fetchError } = await supabase
+                .from('Users')
+                .select('password')
+                .eq('id', userCredentials.user.id)
+                .single();
+            if (fetchError || !userData) {
+                alert("Unable to verify current password")
+                return
+            }
+            // Compare current password
+            const passwordMatch = bcrypt.compareSync(current_password, userData.password)
+            if (!passwordMatch) {
                 alert("Current password is incorrect")
                 return
             }
-
-            // If current password verified, proceed with password update
-            const response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/users/" + userCredentials.user.id, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + userCredentials.accessToken
-                },
-                body: JSON.stringify({ password })
-            })
-
-            const data = await response.json()
-
-            if(response.ok){
+            // Hash new password
+            const salt = bcrypt.genSaltSync(12)
+            const hashedPassword = bcrypt.hashSync(password, salt)
+            // Update password in Supabase
+            const { error: updateError } = await supabase
+                .from('Users')
+                .update({ password: hashedPassword })
+                .eq('id', userCredentials.user.id)
+            if (updateError) {
+                alert("Unable to update the password: " + (updateError.message || JSON.stringify(updateError)))
+            } else {
                 alert("Password updated successfully")
                 event.target.reset()
-            } else if(response.status === 401){
-                setUserCredentials(null)
-                navigate("/auth/login")
-            } else {
-                alert("Unable to update the password: " + data)
             }
         } catch (error) {
             alert("Unable to connect to the server")

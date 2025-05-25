@@ -1,49 +1,47 @@
 import { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { AppContext } from '../../../AppContext';
+import { supabase } from '../../../supabaseClient';
 
 export default function InventoryList() {
     const [products, setProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortField, setSortField] = useState('name');
+    const [sortDirection, setSortDirection] = useState(true); // true = ascending
     const { userCredentials } = useContext(AppContext);
 
     useEffect(() => {
         fetchInventory();
-    }, []);
+    }, [sortField, sortDirection]);
 
     const fetchInventory = async () => {
+        setIsLoading(true);
         try {
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/products`, {
-                headers: {
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
-                }
-            });
-            const data = await response.json();
-            setProducts(data);
-            setIsLoading(false);
+            const { data, error } = await supabase
+                .from('Products')
+                .select('*')
+                .order(sortField, { ascending: sortDirection });
+            if (error) throw error;
+            setProducts(data || []);
         } catch (error) {
             alert('Failed to fetch inventory');
+        } finally {
             setIsLoading(false);
         }
     };
 
     const updateStock = async (productId, quantity) => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/products/${productId}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
-                },
-                body: JSON.stringify({ stock: quantity })
-            });
-
-            if (response.ok) {
-                fetchInventory();
-            } else {
-                throw new Error('Failed to update stock');
-            }
+            const { error } = await supabase
+                .from('Products')
+                .update({ stock: quantity })
+                .eq('id', productId);
+            if (error) throw error;
+            // Update the product in-place in the products array
+            setProducts(prevProducts => prevProducts.map(p =>
+                p.id === productId ? { ...p, stock: quantity } : p
+            ));
         } catch (error) {
             alert(error.message);
         }
@@ -52,6 +50,12 @@ export default function InventoryList() {
     const filteredProducts = products.filter(product => 
         product.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    // Sorting arrow helper
+    function SortArrow({ column }) {
+        if (sortField !== column) return null;
+        return sortDirection ? <span> ▲</span> : <span> ▼</span>;
+    }
 
     return (
         <div className="container my-4">
@@ -95,18 +99,53 @@ export default function InventoryList() {
                     <table className="table">
                         <thead>
                             <tr>
-                                <th>Product</th>
-                                <th>Current Stock</th>
+                                <th>
+                                    <span style={{ cursor: 'pointer' }} onClick={e => {
+                                        e.preventDefault();
+                                        if (sortField === 'id') setSortDirection(d => !d);
+                                        else { setSortField('id'); setSortDirection(true); }
+                                    }}>
+                                        ID<SortArrow column="id" />
+                                    </span>
+                                </th>
+                                <th>
+                                    <span style={{ cursor: 'pointer' }} onClick={e => {
+                                        e.preventDefault();
+                                        if (sortField === 'name') setSortDirection(d => !d);
+                                        else { setSortField('name'); setSortDirection(true); }
+                                    }}>
+                                        Product<SortArrow column="name" />
+                                    </span>
+                                </th>
+                                <th>
+                                    <span style={{ cursor: 'pointer' }} onClick={e => {
+                                        e.preventDefault();
+                                        if (sortField === 'stock') setSortDirection(d => !d);
+                                        else { setSortField('stock'); setSortDirection(true); }
+                                    }}>
+                                        Current Stock<SortArrow column="stock" />
+                                    </span>
+                                </th>
+                                <th>
+                                    <span style={{ cursor: 'pointer' }} onClick={e => {
+                                        e.preventDefault();
+                                        if (sortField === 'price') setSortDirection(d => !d);
+                                        else { setSortField('price'); setSortDirection(true); }
+                                    }}>
+                                        Price<SortArrow column="price" />
+                                    </span>
+                                </th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredProducts.map(product => (
                                 <tr key={product.id}>
+                                    <td>{product.id}</td>
                                     <td>
                                         <div className="d-flex align-items-center">
                                             <img 
-                                                src={`${process.env.REACT_APP_WEBAPI_URL}/images/${product.imageFilename}`}
+                                                src={`${process.env.REACT_APP_SUPABASE_IMAGE_URL}/${product.imageFilename}`}
                                                 alt={product.name}
                                                 style={{ width: '50px', marginRight: '10px' }}
                                             />
@@ -136,6 +175,7 @@ export default function InventoryList() {
                                             </button>
                                         </div>
                                     </td>
+                                    <td>{product.price}</td>
                                     <td>
                                         <Link 
                                             to={`/admin/inventory/${product.id}`}

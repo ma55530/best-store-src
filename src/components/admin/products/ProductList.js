@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AppContext } from "../../../AppContext";
+import { supabase } from '../../../supabaseClient';
 
 export default function ProductList() {
     const [products, setProducts] = useState([]);
@@ -16,45 +17,40 @@ export default function ProductList() {
 
     const [sortColumn, setSortColumn] = useState({ column: "id", orderBy: "desc" });
 
-    const getProducts = useCallback(() => {
-        const url = `${process.env.REACT_APP_WEBAPI_URL}/products?_page=${currentPage}&_limit=${pageSize}&q=${search}&_sort=${sortColumn.column}&_order=${sortColumn.orderBy}`;
-        console.log("Fetching:", url);
-
-        fetch(url)
-            .then(response => {
-                if (response.ok) {
-                    const totalCount = response.headers.get("X-Total-Count");
-                    const pages = Math.ceil(totalCount / pageSize);
-                    setTotalPages(pages);
-                    return response.json();
-                }
-                throw new Error("Failed to fetch products.");
-            })
-            .then(data => setProducts(data))
-            .catch(() => alert("Unable to get the data"));
+    const getProducts = useCallback(async () => {
+        try {
+            let query = supabase
+                .from('Products')
+                .select('*', { count: 'exact' })
+                .order(sortColumn.column === 'createdAt' ? 'created_at' : sortColumn.column, { ascending: sortColumn.orderBy === 'asc' })
+                .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+            if (search) {
+                query = query.ilike('name', `%${search}%`);
+            }
+            const { data, count, error } = await query;
+            if (error) throw error;
+            setProducts(data || []);
+            setTotalPages(Math.ceil((count || 0) / pageSize));
+        } catch (error) {
+            alert('Unable to get the data');
+        }
     }, [currentPage, search, sortColumn]);
 
     useEffect(() => {
         getProducts();
     }, [getProducts]);
 
-    function deleteProduct(id) {
-        fetch(`${process.env.REACT_APP_WEBAPI_URL}/products/${id}`, {
-            method: "DELETE",
-            headers: {
-                Authorization: "Bearer " + userCredentials.accessToken
-            }
-        })
-            .then(response => {
-                if (response.status === 401) {
-                    setUserCredentials(null);
-                    navigate("/auth/login");
-                    return;
-                }
-                if (!response.ok) throw new Error();
-                getProducts();
-            })
-            .catch(() => alert("Unable to delete the product"));
+    async function deleteProduct(id) {
+        try {
+            const { error } = await supabase
+                .from('Products')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+            getProducts();
+        } catch (error) {
+            alert('Unable to delete the product');
+        }
     }
 
     function handleSearch(event) {
@@ -142,12 +138,12 @@ export default function ProductList() {
                             <td>{product.price}€</td>
                             <td>
                                 <img
-                                    src={`${process.env.REACT_APP_WEBAPI_URL}/images/${product.imageFilename}`}
+                                    src={`${process.env.REACT_APP_SUPABASE_IMAGE_URL}/${product.imageFilename}`}
                                     width="100"
                                     alt={product.name || "Product"}
                                 />
                             </td>
-                            <td>{product.createdAt ? product.createdAt.slice(0, 10) : "N/A"}</td>
+                            <td>{product.created_at ? product.created_at.slice(0, 10) : "N/A"}</td>
                             <td style={{ whiteSpace: "nowrap" }}>
                                 <Link className="btn btn-primary btn-sm me-1" to={`/admin/products/edit/${product.id}`}>
                                     Edit

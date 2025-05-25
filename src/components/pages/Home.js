@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
+import { supabase } from '../../supabaseClient';
+
+
 
 export default function Home() {
     
@@ -19,39 +22,33 @@ export default function Home() {
     const debouncedSearch = useCallback((query) => {
         setFilterParams(prev => ({...prev, q: query}));
     }, [setFilterParams]); // Add dependency
-
+    
     function getProducts(){
-        let url = process.env.REACT_APP_WEBAPI_URL + "/products?_page=" + currentPage + "&_limit=" + pageSize
+        // Supabase query for products with filters, pagination, and sorting
+        let query = supabase
+            .from('Products')
+            .select('*', { count: 'exact' })
+            .range((currentPage - 1) * pageSize, currentPage * pageSize - 1)
+            .order(sortColumn.column, { ascending: sortColumn.orderBy === 'asc' });
 
-        if(filterParams.brand){
-            url += "&brand=" + filterParams.brand
+        if (filterParams.brand) {
+            query = query.eq('brand', filterParams.brand);
+        }
+        if (filterParams.category) {
+            query = query.eq('category', filterParams.category);
+        }
+        if (filterParams.q) {
+            query = query.ilike('name', `%${filterParams.q}%`);
         }
 
-        if(filterParams.category){
-            url += "&category=" + filterParams.category
-        }
-
-        if(filterParams.q){
-            url += "&q=" + filterParams.q
-        }
-
-        url += "&_sort=" + sortColumn.column + "&_order=" + sortColumn.orderBy
-        console.log("url="+url)
-
-        fetch(url).then(response => {
-            if(response.ok){
-                let totalCount = response.headers.get('X-Total-Count')
-                let pages = Math.ceil(totalCount / pageSize)
-                setTotalPages(pages)
-                return response.json()
+        query.then(({ data, count, error }) => {
+            if (error) {
+                alert('Unable to get the data');
+                return;
             }
-
-            throw new Error() 
-        }).then(data =>{
-            setProducts(data)
-        }).catch(error => {
-            alert("Unable to get the data")
-        })
+            setProducts(data || []);
+            setTotalPages(Math.ceil((count || 0) / pageSize));
+        });
     }
 
     useEffect(getProducts, [currentPage, filterParams, sortColumn])
@@ -60,9 +57,8 @@ export default function Home() {
     for(let i = 1; i <=totalPages; i++){
         paginationButtons.push(
             <li className={i === currentPage ? "page-item active": "page-item"} key={i}>
-                <a class="page-link" href={"?page=" + i} onClick={event => {
+                <a className="page-link" href={"?page=" + i} onClick={event => {
                     event.preventDefault()
-
                     setCurrentPage(i)
                 }}>{i}</a>
             </li>
@@ -219,17 +215,17 @@ function debounce(func, wait) {
 function ProductItem({product}){
     return(
         <div className="rounded border shadow p-4 text-center h-100">
-            <img src={process.env.REACT_APP_WEBAPI_URL + "/images/"+ product.imageFilename}
+            <img src={`${process.env.REACT_APP_SUPABASE_IMAGE_URL}/${product.imageFilename}`}
                 className="img-fluid" alt="..." 
                 style={{height:"220px", objectFit:"contain"}}/>
             <hr />
             <h4 className="py-2">{product.name}</h4>
             <p>
                 Brand: {product.brand}, Category: {product.category} <br />
-                {product.description.substr(0, 48) + "..."}
+                {product.description ? product.description.substr(0, 48) + "..." : null}
             </p>
             <h4 className="mb-2">{product.price}$</h4>
             <Link className="btn btn-primary btn-sm m-2" to={"/products/" + product.id} role="button">Details</Link>
-        </div>  
-    )
+        </div>
+    );
 }

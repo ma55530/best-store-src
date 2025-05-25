@@ -1,6 +1,7 @@
 import { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AppContext } from "../../../AppContext";
+import { supabase } from '../../../supabaseClient';
 
 export default function CreateProduct(){
 
@@ -15,42 +16,73 @@ export default function CreateProduct(){
 
         const formData = new FormData(event.target)
         const product = Object.fromEntries(formData.entries())
-        
-        console.log('Form data contents:')
+        let imageFilename = '';
+        // Handle image upload
+        const imageFile = formData.get('image');
+        if (imageFile && imageFile.name) {
+            // Upload to the root of the 'images' bucket (not in a subfolder)
+            const fileName = imageFile.name;
+            try {
+                // Upload to existing 'images' bucket, at the root
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('images')
+                    .upload(fileName, imageFile, {
+                        cacheControl: '3600',
+                        upsert: true,
+                        contentType: imageFile.type
+                    });
 
-        if(!product.name || !product.brand || !product.category || !product.price
-            || !product.description || !product.image.name){
-                alert("Please fill out all the fields")
-                return
+                if (uploadError) {
+                    console.error('Upload error details:', uploadError);
+                    const errorMessage = uploadError.message === 'The resource already exists'
+                        ? 'A file with this name already exists. Please try again.'
+                        : uploadError.message;
+                    alert('Image upload failed: ' + errorMessage);
+                    return;
+                }
+                // Get the public URL
+                const { data: publicUrlData } = supabase.storage
+                    .from('images')
+                    .getPublicUrl(fileName);
+                console.log('Upload successful:', uploadData);
+                console.log('Public URL:', publicUrlData);
+                imageFilename = fileName;
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Image upload failed: ' + error.message);
+                return;
             }
+        } else {
+            alert('Please select an image');
+            return;
+        }
+
+        if(!product.name || !product.brand || !product.category || !product.price || !product.description){
+            alert("Please fill out all the fields")
+            return
+        }
 
         try{
-            const response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/products",{
-                method: "POST",
-                headers: {
-                    "Authorization": "Bearer " + userCredentials.accessToken
-                },
-                body: formData
-            })
-
-            const data = await response.json()
-            console.log('Server response:', data)
-
-            
-            if(response.ok){
+            const { error } = await supabase
+                .from('Products')
+                .insert([
+                    {
+                        name: product.name,
+                        brand: product.brand,
+                        category: product.category,
+                        price: product.price,
+                        description: product.description,
+                        imageFilename: imageFilename
+                    }
+                ])
+            if (error) {
+                console.error('Supabase insert error:', error);
+                alert("Unable to create product: " + (error.message || JSON.stringify(error)));
+            } else {
                 navigate("/admin/products")
             }
-            else if(response.status === 400){
-                setValidationErrors(data)
-            }
-            else if(response.status === 401){
-                setUserCredentials(null)
-            }
-            else{
-                alert("Unable to create product")
-            }
-        }catch{
-            alert("Unable to connect to the server")
+        }catch(error){
+            alert("Unable to connect to the server: " + error.message)
         }
     }
     return(

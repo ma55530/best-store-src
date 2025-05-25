@@ -1,8 +1,8 @@
 import { useState, useEffect, useContext } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AppContext } from '../../../AppContext';
+import { supabase } from '../../../supabaseClient';
 
-// Add this status color mapping function at the top of your component
 const getStatusColor = (status) => {
     switch (status) {
         case 'pending':
@@ -22,6 +22,7 @@ const getStatusColor = (status) => {
 
 export default function AdminOrderDetail() {
     const [order, setOrder] = useState(null);
+    const [orderItems, setOrderItems] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const { userCredentials } = useContext(AppContext);
@@ -34,18 +35,21 @@ export default function AdminOrderDetail() {
 
     const fetchOrderDetails = async () => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/orders/${id}`, {
-                headers: {
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error('Order not found');
-            }
-            
-            const data = await response.json();
-            setOrder(data);
+            // Fetch order
+            const { data: orderData, error: orderError } = await supabase
+                .from('Orders')
+                .select('*')
+                .eq('id', id)
+                .single();
+            if (orderError || !orderData) throw new Error('Order not found');
+            setOrder(orderData);
+            // Fetch order items and join with products
+            const { data: itemsData, error: itemsError } = await supabase
+                .from('Order_items')
+                .select('*, product:product_id (name, imageFilename)')
+                .eq('order_id', id);
+            if (itemsError) throw new Error('Failed to fetch order items');
+            setOrderItems(itemsData || []);
         } catch (error) {
             alert(error.message);
             navigate('/admin/orders');
@@ -57,19 +61,11 @@ export default function AdminOrderDetail() {
     const handleStatusChange = async (newStatus) => {
         setIsSaving(true);
         try {
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/orders/${id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
-                },
-                body: JSON.stringify({ status: newStatus })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to update order status');
-            }
-
+            const { error } = await supabase
+                .from('Orders')
+                .update({ status: newStatus })
+                .eq('id', id);
+            if (error) throw new Error('Failed to update order status');
             fetchOrderDetails();
         } catch (error) {
             alert(error.message);
@@ -87,7 +83,6 @@ export default function AdminOrderDetail() {
             </div>
         );
     }
-
     if (!order) {
         return (
             <div className="container my-4 text-center">
@@ -96,14 +91,12 @@ export default function AdminOrderDetail() {
             </div>
         );
     }
-
     return (
         <div className="container my-4">
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h2>Order #{order.id}</h2>
                 <Link to="/admin/orders" className="btn btn-outline-primary">Back to Orders</Link>
             </div>
-
             <div className="row">
                 <div className="col-md-8">
                     <div className="card mb-4">
@@ -122,16 +115,16 @@ export default function AdminOrderDetail() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {order.items.map((item) => (
+                                        {orderItems.map((item) => (
                                             <tr key={item.id}>
                                                 <td>
                                                     <div className="d-flex align-items-center">
-                                                        <img 
-                                                            src={`${process.env.REACT_APP_WEBAPI_URL}/images/${item.imageFilename}`}
-                                                            alt={item.name}
+                                                        <img
+                                                            src={`${process.env.REACT_APP_SUPABASE_IMAGE_URL}/${item.product?.imageFilename}`}
+                                                            alt={item.product?.name}
                                                             style={{ width: '50px', marginRight: '10px' }}
                                                         />
-                                                        {item.name}
+                                                        {item.product?.name}
                                                     </div>
                                                 </td>
                                                 <td>${item.price}</td>
@@ -150,15 +143,12 @@ export default function AdminOrderDetail() {
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <div className="col-md-4">
                     <div className="card mb-4">
                         <div className="card-header">
                             <h5 className="card-title mb-0">Order Status</h5>
                         </div>
                         <div className="card-body">
-                            <select 
+                            <select
                                 className={`form-select mb-3 ${getStatusColor(order.status)}`}
                                 value={order.status}
                                 onChange={(e) => handleStatusChange(e.target.value)}
@@ -171,7 +161,7 @@ export default function AdminOrderDetail() {
                                 <option value="cancelled" className="text-danger">Cancelled</option>
                             </select>
                             <div className="mb-3">
-                                <span className={`badge bg-${order.status === 'pending' ? 'warning' : 
+                                <span className={`badge bg-${order.status === 'pending' ? 'warning' :
                                     order.status === 'processing' ? 'info' :
                                     order.status === 'shipped' ? 'primary' :
                                     order.status === 'delivered' ? 'success' : 'danger'}`}
@@ -188,34 +178,32 @@ export default function AdminOrderDetail() {
                             )}
                         </div>
                     </div>
-
-                    <div className="card mb-4">
+                    <div className="card">
                         <div className="card-header">
                             <h5 className="card-title mb-0">Order Information</h5>
                         </div>
                         <div className="card-body">
                             <p><strong>Order Date:</strong><br/>
-                                {new Date(order.createdAt).toLocaleString()}
+                                {order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}
                             </p>
                             <p><strong>User ID:</strong><br/>
-                                {order.userId}
+                                {order.user_id}
                             </p>
                         </div>
                     </div>
-
-                    <div className="card">
+                    <div className="card mb-4">
                         <div className="card-header">
                             <h5 className="card-title mb-0">Shipping Details</h5>
                         </div>
                         <div className="card-body">
                             <p className="mb-1"><strong>Name:</strong><br/>
-                                {order.shippingDetails.firstName} {order.shippingDetails.lastName}
+                                {order.shipping_first_name} {order.shipping_last_name}
                             </p>
                             <p className="mb-1"><strong>Address:</strong><br/>
-                                {order.shippingDetails.address}
+                                {order.shipping_address}
                             </p>
                             <p className="mb-1"><strong>Phone:</strong><br/>
-                                {order.shippingDetails.phone}
+                                {order.shipping_phone}
                             </p>
                         </div>
                     </div>

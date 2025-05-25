@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AppContext } from '../../AppContext';
+import { supabase } from '../../supabaseClient';
 
 const getStatusStyles = (status) => {
     switch (status) {
@@ -21,34 +22,36 @@ const getStatusStyles = (status) => {
 
 export default function OrderDetail() {
     const [order, setOrder] = useState(null);
+    const [orderItems, setOrderItems] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const { userCredentials } = useContext(AppContext);
     const { id } = useParams();
 
     useEffect(() => {
-        const fetchOrder = async () => {
+        const fetchOrderAndItems = async () => {
             try {
-                const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/orders/${id}`, {
-                    headers: {
-                        'Authorization': `Bearer ${userCredentials.accessToken}`
-                    }
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Order not found');
-                }
-                
-                const data = await response.json();
-                setOrder(data);
+                // Fetch order
+                const { data: orderData, error: orderError } = await supabase
+                    .from('Orders')
+                    .select('*')
+                    .eq('id', id)
+                    .single();
+                if (orderError || !orderData) throw new Error('Order not found');
+                setOrder(orderData);
+                // Fetch order items and join with products
+                const { data: itemsData, error: itemsError } = await supabase
+                    .from('Order_items')
+                    .select('*, product:product_id (name, imageFilename)')
+                    .eq('order_id', id);
+                if (itemsError) throw new Error('Failed to fetch order items');
+                setOrderItems(itemsData || []);
             } catch (error) {
                 alert(error.message);
             } finally {
                 setIsLoading(false);
             }
         };
-
-        fetchOrder();
-    }, [id, userCredentials]);
+        fetchOrderAndItems();
+    }, [id]);
 
     if (isLoading) {
         return (
@@ -92,16 +95,16 @@ export default function OrderDetail() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {order.items.map((item) => (
+                                        {orderItems.map((item) => (
                                             <tr key={item.id}>
                                                 <td>
                                                     <div className="d-flex align-items-center">
-                                                        <img 
-                                                            src={`${process.env.REACT_APP_WEBAPI_URL}/images/${item.imageFilename}`}
-                                                            alt={item.name}
+                                                        <img
+                                                            src={`${process.env.REACT_APP_SUPABASE_IMAGE_URL}/${item.product?.imageFilename}`}
+                                                            alt={item.product?.name}
                                                             style={{ width: '50px', marginRight: '10px' }}
                                                         />
-                                                        {item.name}
+                                                        {item.product?.name}
                                                     </div>
                                                 </td>
                                                 <td>${item.price}</td>
@@ -112,6 +115,15 @@ export default function OrderDetail() {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <div className="card-body">
+                            <h5 className="card-title">Shipping Details</h5>
+                            <p className="mb-1">{order.shipping_first_name} {order.shipping_last_name}</p>
+                            <p className="mb-1">{order.shipping_address}</p>
+                            <p className="mb-1">{order.shipping_phone}</p>
                         </div>
                     </div>
                 </div>
@@ -129,22 +141,13 @@ export default function OrderDetail() {
                             <div className="mb-3">
                                 <strong>Date:</strong>
                                 <span className="ms-2">
-                                    {new Date(order.createdAt).toLocaleDateString()}
+                                    {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ''}
                                 </span>
                             </div>
                             <div className="mb-3">
                                 <strong>Total:</strong>
                                 <span className="ms-2">${order.total}</span>
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="card">
-                        <div className="card-body">
-                            <h5 className="card-title">Shipping Details</h5>
-                            <p className="mb-1">{order.shippingDetails.firstName} {order.shippingDetails.lastName}</p>
-                            <p className="mb-1">{order.shippingDetails.address}</p>
-                            <p className="mb-1">{order.shippingDetails.phone}</p>
                         </div>
                     </div>
                 </div>

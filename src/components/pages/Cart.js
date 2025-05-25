@@ -3,6 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AppContext } from '../../AppContext';
 import { cartStorage } from '../../utils/cartStorage';
 import { sessionStorage } from '../../utils/sessionStorage';
+import { supabase } from '../../supabaseClient';
+
+const SUPABASE_IMAGE_URL = process.env.REACT_APP_SUPABASE_IMAGE_URL;
 
 export default function Cart() {
     const [cartItems, setCartItems] = useState([]);
@@ -21,13 +24,16 @@ export default function Cart() {
         try {
             const validation = {};
             for (const item of cartItems) {
-                const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/products/${item.id}`);
-                const product = await response.json();
-                
-                if (!product.stock || product.stock < item.quantity) {
+                // Fetch product from Supabase
+                const { data: product, error } = await supabase
+                    .from('Products')
+                    .select('stock')
+                    .eq('id', item.id)
+                    .single();
+                if (error || !product || !product.stock || product.stock < item.quantity) {
                     validation[item.id] = {
                         hasError: true,
-                        message: `Only ${product.stock} available`
+                        message: product && product.stock ? `Only ${product.stock} available` : 'Out of stock'
                     };
                 }
             }
@@ -134,8 +140,8 @@ export default function Cart() {
                                     <tr key={item.id}>
                                         <td>
                                             <div className="d-flex align-items-center">
-                                                <img 
-                                                    src={`${process.env.REACT_APP_WEBAPI_URL}/images/${item.imageFilename}`}
+                                                <img
+                                                    src={`${process.env.REACT_APP_SUPABASE_IMAGE_URL}/${item.imageFilename}`}
                                                     alt={item.name}
                                                     style={{ width: '50px', marginRight: '10px' }}
                                                 />

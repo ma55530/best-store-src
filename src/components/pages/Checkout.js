@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cartStorage } from '../../utils/cartStorage';
 import { AppContext } from '../../AppContext';
+import { supabase } from '../../supabaseClient';
 
 export default function Checkout() {
     const [cartItems, setCartItems] = useState([]);
@@ -24,37 +25,25 @@ export default function Checkout() {
     const updateProductStock = async (items) => {
         try {
             for (const item of items) {
-                // First get current product stock
-                const productResponse = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/products/${item.id}`, {
-                    headers: {
-                        'Authorization': `Bearer ${userCredentials.accessToken}`
-                    }
-                });
-                
-                if (!productResponse.ok) {
+                // Fetch product from Supabase
+                const { data: product, error } = await supabase
+                    .from('Products')
+                    .select('stock')
+                    .eq('id', item.id)
+                    .single();
+                if (error || !product) {
                     throw new Error(`Failed to fetch product ${item.id}`);
                 }
-                
-                const product = await productResponse.json();
                 const newStock = product.stock - item.quantity;
-                
                 if (newStock < 0) {
                     throw new Error(`Not enough stock for ${item.name}`);
                 }
-
-                // Update the stock
-                const updateResponse = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/products/${item.id}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${userCredentials.accessToken}`
-                    },
-                    body: JSON.stringify({
-                        stock: newStock
-                    })
-                });
-                
-                if (!updateResponse.ok) {
+                // Update the stock in Supabase
+                const { error: updateError } = await supabase
+                    .from('Products')
+                    .update({ stock: newStock })
+                    .eq('id', item.id);
+                if (updateError) {
                     throw new Error(`Failed to update stock for ${item.name}`);
                 }
             }
@@ -66,36 +55,54 @@ export default function Checkout() {
     const handleSubmit = async (event) => {
         event.preventDefault();
         setIsProcessing(true);
-
         try {
             const formData = new FormData(event.target);
             const orderDetails = Object.fromEntries(formData.entries());
-
-            // First update the stock
-            await updateProductStock(cartItems);
-            
-            // Then create the order
-            const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/orders`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userCredentials.accessToken}`
-                },
-                body: JSON.stringify({
-                    userId: userCredentials.user.id,
-                    items: cartItems,
-                    total: total,
-                    status: 'pending',
-                    shippingDetails: orderDetails,
-                    createdAt: new Date().toISOString()
-                })
+            // Debug: log payload
+            console.log({
+                userId: userCredentials.user.id,
+                items: cartItems,
+                total: Number(total),
+                status: 'pending',
+                shippingDetails: orderDetails
             });
-
-            if (!response.ok) {
-                throw new Error('Failed to place order');
+            // Insert order (without items)
+            const { data: orderData, error: orderError } = await supabase
+                .from('Orders')
+                .insert([
+                    {
+                        user_id: userCredentials.user.id,
+                        total: Number(total),
+                        status: 'pending',
+                        shipping_first_name: orderDetails.firstName,
+                        shipping_last_name: orderDetails.lastName,
+                        shipping_address: orderDetails.address,
+                        shipping_phone: orderDetails.phone
+                    }
+                ])
+                .select('id')
+                .single();
+            if (orderError && orderError.code === '23505') {
+                throw new Error('You already have an active order. Please complete or cancel it before placing a new one.');
             }
-
-            // Clear cart and redirect only if both operations succeed
+            if (orderError || !orderData) {
+                throw new Error(orderError?.message || 'Failed to place order');
+            }
+            // Insert each cart item into order_items (normalized, no name/imageFilename)
+            const orderItems = cartItems.map(item => ({
+                order_id: orderData.id, // snake_case for Supabase
+                product_id: item.id,    // snake_case for Supabase
+                price: item.price,
+                quantity: item.quantity
+            }));
+            const { error: itemsError } = await supabase
+                .from('Order_items') // match the table name used in Orders.js
+                .insert(orderItems);
+            if (itemsError) {
+                throw new Error(itemsError.message || 'Failed to add order items');
+            }
+            // Only update stock if order and items were created successfully
+            await updateProductStock(cartItems);
             cartStorage.clearCart();
             navigate('/orders');
         } catch (error) {

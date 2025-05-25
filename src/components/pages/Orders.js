@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { AppContext } from '../../AppContext';
+import { supabase } from '../../supabaseClient';
 
 const getStatusStyles = (status) => {
     switch (status) {
@@ -25,25 +26,46 @@ export default function Orders() {
     const [sortField, setSortField] = useState('createdAt');
     const [sortDirection, setSortDirection] = useState('desc');
     const { userCredentials } = useContext(AppContext);
+    const [orderItemsMap, setOrderItemsMap] = useState({});
 
     useEffect(() => {
-        const fetchOrders = async () => {
+        const fetchOrdersAndItems = async () => {
             try {
-                const response = await fetch(`${process.env.REACT_APP_WEBAPI_URL}/orders?userId=${userCredentials.user.id}`, {
-                    headers: {
-                        'Authorization': `Bearer ${userCredentials.accessToken}`
+                // Fetch orders for the current user from Supabase
+                const { data: ordersData, error: ordersError } = await supabase
+                    .from('Orders')
+                    .select('*')
+                    .eq('user_id', userCredentials.user.id);
+                if (ordersError) throw ordersError;
+                setOrders(ordersData || []);
+                // Fetch all order items for these orders
+                const orderIds = (ordersData || []).map(o => o.id);
+                if (orderIds.length > 0) {
+                    const { data: itemsData, error: itemsError } = await supabase
+                        .from('Order_items') // use all lowercase, as Supabase converts table names to lowercase by default
+                        .select('order_id, quantity')
+                        .in('order_id', orderIds);
+                    if (itemsError) {
+                        alert('Failed to fetch order items: ' + itemsError.message);
+                        setOrderItemsMap({});
+                    } else if (itemsData) {
+                        // Map order_id to total items
+                        const map = {};
+                        itemsData.forEach(item => {
+                            map[item.order_id] = (map[item.order_id] || 0) + item.quantity;
+                        });
+                        setOrderItemsMap(map);
                     }
-                });
-                const data = await response.json();
-                setOrders(data);
+                } else {
+                    setOrderItemsMap({});
+                }
             } catch (error) {
-                alert('Failed to fetch orders');
+                // Only show alert if there is a real error, not just empty orders
             } finally {
                 setIsLoading(false);
             }
         };
-
-        fetchOrders();
+        fetchOrdersAndItems();
     }, [userCredentials]);
 
     const handleSort = (field) => {
@@ -90,7 +112,7 @@ export default function Orders() {
                 </div>
             ) : orders.length === 0 ? (
                 <div className="text-center">
-                    <p>No orders found</p>
+                    <p>No orders yet, start shopping!</p>
                     <Link to="/" className="btn btn-primary">Start Shopping</Link>
                 </div>
             ) : (
@@ -142,6 +164,7 @@ export default function Orders() {
                                         )}
                                     </button>
                                 </th>
+                                <th>Items</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -149,13 +172,14 @@ export default function Orders() {
                             {getSortedOrders().map(order => (
                                 <tr key={order.id}>
                                     <td>#{order.id}</td>
-                                    <td>{new Date(order.createdAt).toLocaleDateString()}</td>
+                                    <td>{order.created_at ? new Date(order.created_at).toLocaleString() : ''}</td>
                                     <td>${order.total}</td>
                                     <td>
                                         <span className={`badge bg-${getStatusStyles(order.status).color}`}>
                                             {getStatusStyles(order.status).text}
                                         </span>
                                     </td>
+                                    <td>{orderItemsMap[order.id] !== undefined ? orderItemsMap[order.id] : '-'}</td>
                                     <td>
                                         <Link to={`/orders/${order.id}`} className="btn btn-sm btn-outline-primary">
                                             View Details

@@ -1,73 +1,84 @@
 import { useContext, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AppContext } from "../../../AppContext";
+import { supabase } from '../../../supabaseClient';
 
 export default function EditProduct(){
 
-    const params = useParams()
-    const [initialData, setInitialData] = useState()
-    const [validationErrors, setValidationErrors] = useState({})
+    const [initialData, setInitialData] = useState(null);
+    const params = useParams();
+    const navigate = useNavigate();
+    const { userCredentials, setUserCredentials } = useContext(AppContext);
+    const [validationErrors, setValidationErrors] = useState({});
 
-    const {userCredentials, setUserCredentials} = useContext(AppContext)
-    const navigate = useNavigate()
-    
-    function getProduct(){
-        fetch(process.env.REACT_APP_WEBAPI_URL + "/products/" + params.id).then(response => {
-            if(response.ok){
-                return response.json()
-            }
+    useEffect(() => {
+        getProduct();
+    }, [params.id]);
 
-            throw new Error()
-        }).then(data => {
-            setInitialData(data)
-        }).catch(error => {
-            alert("Unable to read the product details")
-        })
+    function getProduct() {
+        supabase
+            .from('Products')
+            .select('*')
+            .eq('id', params.id)
+            .single()
+            .then(({ data, error }) => {
+                if (error || !data) {
+                    alert('Unable to read the product details');
+                } else {
+                    setInitialData(data);
+                }
+            });
     }
 
-    useEffect(getProduct, [params.id])
-
-    async function handleSubmit(event){
-        event.preventDefault()
-
-        const formData = new FormData(event.target)
-        const product = Object.fromEntries(formData.entries())
-        
-        console.log('Form data contents:')
-
-        if(!product.name || !product.brand || !product.category || !product.price
-            || !product.description){
-                alert("Please fill out all the fields")
-                return
+    async function handleSubmit(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const product = Object.fromEntries(formData.entries());
+        let newImageFilename = initialData.imageFilename;
+        const imageFile = formData.get('image');
+        // If a new image is uploaded
+        if (imageFile && imageFile.name) {
+            // Delete the old image from Supabase Storage
+            if (initialData.imageFilename) {
+                await supabase.storage.from('images').remove([initialData.imageFilename]);
             }
-
-        try{
-            const response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/products/" + params.id,{
-                method: "PATCH",
-                headers:{
-                    "Authorization" : "Bearer " + userCredentials.accessToken
-                },
-                body: formData
-            })
-
-            const data = await response.json()
-            console.log('Server response:', data)
-
-            
-            if(response.ok){
-                navigate("/admin/products")
+            // Upload the new image to Supabase Storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('images')
+                .upload(imageFile.name, imageFile, {
+                    cacheControl: '3600',
+                    upsert: true,
+                    contentType: imageFile.type
+                });
+            if (uploadError) {
+                alert('Image upload failed: ' + uploadError.message);
+                return;
             }
-            else if(response.status === 400){
-                setValidationErrors(data)
+            newImageFilename = imageFile.name;
+        }
+        if (!product.name || !product.brand || !product.category || !product.price || !product.description) {
+            alert('Please fill out all the fields');
+            return;
+        }
+        try {
+            const { error } = await supabase
+                .from('Products')
+                .update({
+                    name: product.name,
+                    brand: product.brand,
+                    category: product.category,
+                    price: product.price,
+                    description: product.description,
+                    imageFilename: newImageFilename
+                })
+                .eq('id', params.id);
+            if (error) {
+                alert('Unable to edit product');
+            } else {
+                navigate('/admin/products');
             }
-            else if(response.status === 401){
-                setUserCredentials(null)
-            }
-            else{
-                alert("Unable to edit product")
-            }
-        }catch{
-            alert("Unable to connect to the server")
+        } catch {
+            alert('Unable to connect to the server');
         }
     }
     return(
@@ -131,7 +142,7 @@ export default function EditProduct(){
                 </div>
                 <div className="row mb-3">
                     <div className="offset sm-4 col-sm-8">
-                        <img src={process.env.REACT_APP_WEBAPI_URL + "/images/" + initialData.imageFilename} width="150" alt="..."></img>
+                        <img src={process.env.REACT_APP_SUPABASE_IMAGE_URL + "/" + initialData.imageFilename} width="150" alt="..." />
                     </div>                    
                 </div>
                 

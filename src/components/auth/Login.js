@@ -2,6 +2,8 @@ import { useContext, useState } from "react";
 import { Link, useNavigate, Navigate } from "react-router-dom";
 import { AppContext } from "../../AppContext";
 import { sessionStorage } from '../../utils/sessionStorage';
+import { supabase } from '../../supabaseClient';
+import bcrypt from 'bcryptjs';
 
 export default function Login(){
     const navigate = useNavigate()
@@ -33,23 +35,22 @@ export default function Login(){
         }
 
         try {
-            const response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/login", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ email, password })
-            })
+            // Fetch user from your own users table
+            const { data, error } = await supabase
+                .from('Users')
+                .select('*')
+                .eq('email', email)
+                .single();
 
-            const data = await response.json()
-
-            if(response.ok){
-                setUserCredentials(data)
+            if (error || !data) {
+                alert("User not found or error: " + (error?.message || ""));
+            } else if (!bcrypt.compareSync(password, data.password)) {
+                alert("Incorrect password");
+            } else {
+                setUserCredentials({ user: data });
                 const returnUrl = sessionStorage.get('returnUrl');
                 sessionStorage.remove('returnUrl');
                 navigate(returnUrl || "/");
-            } else {
-                alert("Unable to login: " + data + " or email")
             }
         } catch (error) {
             alert("Unable to connect to the server")
