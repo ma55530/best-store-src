@@ -14,7 +14,7 @@ export default function ProductDetails(){
         try {
             let response = await fetch(process.env.REACT_APP_WEBAPI_URL + "/products/" + params.id);
             let data = await response.json();
-
+            
             if(response.ok) {
                 setProduct(data);
             } else {
