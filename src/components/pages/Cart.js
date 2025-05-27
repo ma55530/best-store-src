@@ -57,8 +57,15 @@ export default function Cart() {
     };
 
     const updateQuantity = (id, newQuantity) => {
+        // Find the product in cart
+        const item = cartItems.find(i => i.id === id);
+        if (!item) return;
+        // Prevent quantity less than 1
         if (newQuantity < 1) return;
-        
+        // Prevent exceeding available stock
+        if (item.stock !== undefined && newQuantity > item.stock) return;
+        // If stockValidation exists for this item and hasError, prevent increasing
+        if (stockValidation[item.id]?.hasError && newQuantity > item.quantity) return;
         cartStorage.updateQuantity(id, newQuantity);
         const updatedCart = cartStorage.getCart();
         setCartItems(updatedCart);
@@ -154,16 +161,23 @@ export default function Cart() {
                                                 <button 
                                                     className="btn btn-outline-secondary btn-sm"
                                                     onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                                    disabled={item.quantity <= 1}
                                                 >-</button>
                                                 <input 
                                                     type="number" 
                                                     className="form-control text-center"
                                                     value={item.quantity}
                                                     onChange={(e) => updateQuantity(item.id, parseInt(e.target.value))}
+                                                    min={1}
+                                                    max={item.stock || 99}
                                                 />
                                                 <button 
                                                     className="btn btn-outline-secondary btn-sm"
                                                     onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                                    disabled={
+                                                        (item.stock !== undefined && item.quantity >= item.stock) ||
+                                                        stockValidation[item.id]?.hasError
+                                                    }
                                                 >+</button>
                                             </div>
                                         </td>

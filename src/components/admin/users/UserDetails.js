@@ -61,10 +61,25 @@ export default function UserDetails() {
             </div>
             <div className="row mb-3">
                 <div className="col-8">Role</div>
-                <div className="col-4">{!user.id ? "" : user.role === "admin" ? <span className="badge text-bg-warning">Admin</span> : <span className="badge text-bg-success">Client</span>}</div>
+                <div className="col-4">
+                    {!user.id ? "" : user.role === "admin" ? (
+                        <span className="badge text-bg-warning">Admin</span>
+                    ) : (
+                        <span className="badge text-bg-success">Client</span>
+                    )}
+                </div>
             </div>
             <hr />
-            <Link className="btn btn-secondary btn-sm" to="/admin/users" role="button">Back</Link>
+            <Link
+                className="btn btn-secondary btn-sm"
+                to="/admin/users"
+                role="button"
+                style={!user.id ? { pointerEvents: 'none', backgroundColor: '#ccc', borderColor: '#ccc', color: '#888' } : {}}
+                tabIndex={!user.id ? -1 : 0}
+                aria-disabled={!user.id ? 'true' : 'false'}
+            >
+                Back
+            </Link>
         </div>
     );
 }
