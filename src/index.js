@@ -24,6 +24,7 @@ import AdminOrderList from './components/admin/orders/AdminOrderList';
 import AdminOrderDetail from './components/admin/orders/AdminOrderDetail';
 import InventoryList from './components/admin/inventory/InventoryList';
 import InventoryDetail from './components/admin/inventory/InventoryDetail';
+import Chatbot from './components/chatbot/Chatbot';
 
 function App(){
 
@@ -49,6 +50,7 @@ function App(){
     <AppContext.Provider value={{userCredentials, setUserCredentials}}>
       <HashRouter>
       <Navbar/>
+      <Chatbot />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/contact" element={<Contact />}/>

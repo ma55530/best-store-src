@@ -8,7 +8,7 @@ export default function Contact() {
         e.preventDefault();
         const form = e.target;
         const data = new FormData(form);
-        fetch('https://formspree.io/f/mvgajqwv', {
+        fetch(process.env.REACT_APP_FORMSPREE_URL, {
             method: 'POST',
             body: data,
             headers: {
